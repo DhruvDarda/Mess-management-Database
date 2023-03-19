@@ -77,29 +77,56 @@ class student(Resource):
             "select food_wasted from wastage where mess_id = %s and date_slot_id = %s", [mess_id, dateslot])
 
         wastage = cursor.fetchone()[0]
-        print(wastage)
 
+        cursor.execute(
+            "select quantity, type from inventory_present_at where mess_id = %s", [mess_id])
+
+        inventory1 = cursor.fetchall()
+        inventory = []
+        for i in range(len(inventory1)):
+            inventory.append((inventory1[i][0], inventory1[i][1]))
+
+        # print(inventory)
+        # print(inventory[0][0])
+        inventory_list = []
+        for item in inventory:
+            inventory_list.append((float(item[0]), item[1]))
+        print(inventory_list)
+
+        # , 'inventory': inventory})
+        cursor.execute(
+            "select product_id,quantity,in_date,expiry from stock_contains where mess_id = %s", [mess_id])
+
+        stock = cursor.fetchall()
         cursor.close()
-        return jsonify({'menu': menu, 'contractor': contractor, 'feedback': feedback, 'wastage': str(wastage)})
+        stock_list = []
+        # for item in stock:
+
+        # print(stock)
+
+        return jsonify({'menu': menu, 'contractor': contractor, 'feedback': feedback, 'wastage': str(wastage), 'inventory': str(inventory_list)})
 
 
-class Hello(Resource):
+class mess(Resource):
 
-    def get(self):
-        data = request.get_json()
+    def get(self, mess_id=1):
         cursor = mysql.connection.cursor()
-        cursor.execute("SELECT * FROM `mess`")
-        result = cursor.fetchall()
+        dayslotno = return_current_day_slot()
+        dateslotno = return_current_date_slot()
+        day = 'tuesday'
+        date = '2023-01-02'
+        slot = 'breakfast'
+
+        cursor.execute(
+            'select mess_name, num_of_employee, number_of_student from `mess`')
+        mess_list = cursor.fetchall()
         cursor.close()
-        return jsonify({'message': result})
 
-    # Corresponds to POST request
-    def post(self):
-        data = request.get_json()
-        return jsonify({'data': 'result'}), 201
-
+        return mess_list
 
 # another resource to calculate the square of a number
+
+
 class Square(Resource):
 
     def get(self, num):
@@ -108,7 +135,8 @@ class Square(Resource):
 
 
 # adding the defined resources along with their corresponding urls
-api.add_resource(student, '/')
+api.add_resource(student, '/student')
+api.add_resource(mess, '/api/messes')
 api.add_resource(Square, '/square/<int:num>')
 
 
