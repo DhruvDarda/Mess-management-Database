@@ -4,9 +4,11 @@ from flask_restful import Resource, Api
 from flask_mysqldb import MySQL
 from datetime import datetime
 from password import password
+from flask_cors import CORS
 
 # creating the flask app
 app = Flask(__name__)
+CORS(app)
 # creating an API object
 api = Api(app)
 
@@ -122,8 +124,8 @@ class mess(Resource):
             'select mess_name, num_of_employee, number_of_student from `mess`')
         mess_list = cursor.fetchall()
         cursor.close()
-
-        return mess_list
+        print(mess_list)
+        return jsonify(mess_list)
 
 # another resource to calculate the square of a number
 
