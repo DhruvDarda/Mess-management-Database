@@ -1,20 +1,18 @@
 # using flask_restful
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, session,abort
 from flask_restful import Resource, Api
 from flask_mysqldb import MySQL
 from datetime import datetime
-from password import password
-from flask_cors import CORS
+import requests
 
 # creating the flask app
 app = Flask(__name__)
-CORS(app)
 # creating an API object
 api = Api(app)
 
 app.config['MYSQL_HOST'] = 'localhost'
 app.config['MYSQL_USER'] = 'root'
-app.config['MYSQL_PASSWORD'] = password
+app.config['MYSQL_PASSWORD'] = 'root'
 app.config['MYSQL_DB'] = 'mess_management'
 
 mysql = MySQL(app)
@@ -43,7 +41,7 @@ def return_current_date_slot():
     return {'date': date, 'slot': slot}
 
 
-class student(Resource):
+class temp(Resource):
 
     def get(self, mess_id=1):
         cursor = mysql.connection.cursor()
@@ -110,57 +108,150 @@ class student(Resource):
         return jsonify({'menu': menu, 'contractor': contractor, 'feedback': feedback, 'wastage': str(wastage), 'inventory': str(inventory_list)})
 
 
-class mess(Resource):
+class mess(Resource): #/api/messes
 
-    def get(self, mess_id=1):
+    def get(self):
         cursor = mysql.connection.cursor()
 
         cursor.execute(
-            'select mess_id, mess_name, num_of_employee, number_of_student from `mess`')
+            'select mess_id,mess_name, num_of_employee, number_of_student from `mess`')
+        
         mess_list = cursor.fetchall()
-        mess_dict = {"Mess ID": [], "Mess Name": [],
-                     "Num of Employee": [], "No. of Student": []}
-
-        messlist = []
-        for i in range(len(mess_list)):
-            mess_dict = {}
-            mess_dict["Mess ID"] = mess_list[i][0]
-            mess_dict["Mess Name"] = mess_list[i][1]
-            mess_dict["Num of Employee"] = mess_list[i][2]
-            mess_dict["No. of Student"] = mess_list[i][3]
-            messlist.append(mess_dict)
-
+        print(mess_list)
+        return_obj = []
+        for item in mess_list:
+            d = {"Mess Id":item[0],"Mess Name":item[1],"Num of Employee":item[2],"No. of Student":item[3]}
+            return_obj.append(d)
         cursor.close()
 
-        return jsonify(messlist)
+        return jsonify(return_obj)
 
 
-class bla(Resource):
+class student_get(Resource):  # /api/students?mess_id = {mess_id} - list of students 
 
     def get(self, mess_id=1):
+        mess_id = request.args.get('mess_id')
         cursor = mysql.connection.cursor()
-
-        cursor.execute(
-            'select mess_name, num_of_employee, number_of_student from `mess`')
-        mess_list = cursor.fetchall()
+        if(mess_id == None):
+            cursor.execute('select s.roll_number,s.name,m.mess_name, s.email, s.gender,s.mess_id from `student_allocated` as s,`mess` as m where s.mess_id = m.mess_id')
+        else:
+            cursor.execute('select s.roll_number,s.name,m.mess_name, s.email, s.gender,s.mess_id from `student_allocated` as s,`mess` as m where s.mess_id = m.mess_id and s.mess_id = %s',[mess_id])
+        student_out = cursor.fetchall()
         cursor.close()
+        print(student_out)
+        student_list = []
+        for item in student_out:
+            d = {'Roll Number':item[0],'Name':item[1],'Mess Name':item[2],'Email':item[3],'Gender':item[4],'Mess_id':item[5]}
+            student_list.append(d)
+        return jsonify(student_list)
+    
+class student_delete(Resource):  # /api/students/delete?roll_no=19110101
+    def get(self):
+        print("Deleteting student")
+        roll_no = request.args['roll_no']
+        cursor = mysql.connection.cursor()
+        # SET FOREIGN_KEY_CHECKS=0;
+        cursor.execute('SET FOREIGN_KEY_CHECKS=0')
+        cursor.execute('delete from `student_allocated` where roll_number=%s',[roll_no])
+        student_out = cursor.fetchall()
+        cursor.close()
+        print("Deleted output: ",student_out)
+        mysql.connection.commit()
+        return jsonify("Deleted roll number {}".format(roll_no))
 
-        return jsonify(mess_list)
+class student_update(Resource): 
+#  myobj = {'roll_no': 19110104,
+#                  'name' : "my_newName",
+#                  'email' : "joblessmf@unknown.com",
+#                  'mess_id':2,
+#                  'password':"new_password",
+#                  'gender' : 'male'
+#                  }
+    def post(self):
+        print("Student Update")
+        print(request.json)
 
-# another resource to calculate the square of a number
+        roll_no = request.json.get('Roll Number')
+        mess_id = request.json.get('Mess_id')
+        name = request.json.get('Name')
+        email = request.json.get('Email')
+        password = request.json.get('password')
+        gender = request.json.get('Gender')
+        cursor = mysql.connection.cursor()
+        print("Roll no:", roll_no)
+        cursor.execute("select roll_number,name, email, gender,mess_id,password from `student_allocated` where roll_number=%s",[roll_no])
+        old_student_data = cursor.fetchone()
+        _,old_name,old_email,old_gender,old_mess_id,old_password = old_student_data
+        
 
+        name = old_name if name == None else name
+        email = old_email if email == None else email
+        gender = old_gender if gender == None else gender
+        mess_id = old_mess_id if mess_id == None else mess_id
+        password = old_password if password == None else password
 
-class Square(Resource):
+        cmd = 'update student_allocated set mess_id={},name="{}",email="{}",password="{}",gender="{}" where roll_number=%s'.format(mess_id,name,email,password,gender)
+        output = cursor.execute(cmd,[roll_no])
+        mysql.connection.commit()
+        return("Updated")
+    
+class student_add(Resource): 
+# Sample post request object
+#  myobj = {'roll_no': 19110104,
+#                  'name' : "my_newName",
+#                  'email' : "joblessmf@unknown.com",
+#                  'mess_id':2,
+#                  'password':"new_password",
+#                  'gender' : 'male'
+#                  }
+    def post(self):
+        roll_no = request.json.get('Roll Number')
+        mess_id = request.json.get('Mess_id')
+        name = request.json.get('Name')
+        email = request.json.get('Email')
+        password = request.json.get('password')
+        gender = request.json.get('Gender')
+        cursor = mysql.connection.cursor()
+        output = cursor.execute('insert into student_allocated values (%s,%s,%s,%s,%s,%s)',[roll_no,mess_id,name,email,password,gender])
+        mysql.connection.commit()
+        return("Added")
+class post_request(Resource):  # /api/students/update?roll_no = {roll_no}&name={new_name}... - update student
+# http://127.0.0.1:5000/api/students/update?roll_no=19110104&name=shiva&mess_id=3&email=vp.shivasan@iitgn.ac.in&password=fluffy&gender=male
+    def get(self):
 
-    def get(self, num):
+        url = 'http://127.0.0.1:5000/api/students/update'
+        myobj = {'roll_no': 19110104,
+                 'name' : "my_newName",
+                 'email' : "joblessmf@unknown11.com",
+                 'mess_id':3,
+                 'password':"new_password"
+                 }
+        
+        # url = 'http://127.0.0.1:5000/api/students/add'
+        # myobj = {'roll_no': 19110101,
+        #          'name' : "101_name______",
+        #          'email' : "joblessmf_101@unknown11.com",
+        #          'mess_id':2,
+        #          'password':"new_password",
+        #          'gender':"female"
+        #          }
+        # url = 'http://127.0.0.1:5000/api/register'
+        # myobj = {'username': "shiva",
+        #          'password' : "yoyoyo",
+        #          }
+        x = requests.post(url, json = myobj)
 
-        return jsonify({'square': num**2})
+        return(x.text)
 
 
 # adding the defined resources along with their corresponding urls
-api.add_resource(student, '/api/student')
+api.add_resource(student_get, '/api/students')
+api.add_resource(student_delete, '/api/students/delete')
+api.add_resource(student_update, '/api/students/update')
+api.add_resource(student_add, '/api/students/add')
 api.add_resource(mess, '/api/messes')
-api.add_resource(Square, '/square/<int:num>')
+api.add_resource(post_request, '/api/post_request')
+
 
 
 # driver function
